@@ -17,7 +17,7 @@ export class ReservationsService {
     private courtRepository: Repository<Court>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
-  ) {}
+  ) { }
 
   async create(createReservationDto: CreateReservationDto, userId: string): Promise<ReservationResponseDto> {
     const { courtId, startTime, endTime, notes } = createReservationDto;
@@ -121,86 +121,126 @@ export class ReservationsService {
   }
 
   async findAll(userId: string, userRole: string): Promise<ReservationResponseDto[]> {
-    let reservations: Reservation[];
 
-    if (userRole === 'admin' || userRole === 'manager') {
-      // Admin/Manager can see all reservations
-      reservations = await this.reservationRepository.find({
-        relations: ['court', 'user'],
-        order: { createdAt: 'DESC' },
-      });
-    } else {
-      // Regular users can only see their own reservations
-      reservations = await this.reservationRepository.find({
-        where: { userId },
-        relations: ['court', 'user'],
-        order: { createdAt: 'DESC' },
-      });
+    try {
+      let reservations: Reservation[];
+
+      if (userRole === 'admin' || userRole === 'manager') {
+        // Admin/Manager can see all reservations
+        reservations = await this.reservationRepository.find({
+          relations: ['court', 'user'],
+          order: { createdAt: 'DESC' },
+        });
+      } else {
+        // Regular users can only see their own reservations
+        reservations = await this.reservationRepository.find({
+          where: { userId },
+          relations: ['court', 'user'],
+          order: { createdAt: 'DESC' },
+        });
+      }
+
+      return reservations.map(reservation => this.toReservationResponseDto(reservation));
+    } catch (error) {
+      console.error('Error fetching reservations:', error);
+
+      // Veritabanı bağlantı hatası durumunda boş array döndür
+      if (error.code === '58P01' || error.message?.includes('could not open file')) {
+        console.warn('Database file error detected, returning empty reservations list');
+        return [];
+      }
+
+      // Diğer hatalar için yeniden fırlat
+      throw error;
     }
-
-    return reservations.map(reservation => this.toReservationResponseDto(reservation));
   }
 
   // Geçmiş rezervasyonları getir (bugünden eski olanlar)
   async getPastReservations(userId: string, userRole: string): Promise<ReservationResponseDto[]> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    let reservations: Reservation[];
+      let reservations: Reservation[];
 
-    if (userRole === 'admin' || userRole === 'manager') {
-      // Admin/Manager can see all past reservations
-      reservations = await this.reservationRepository.find({
-        where: {
-          startTime: LessThan(today),
-        },
-        relations: ['court', 'user'],
-        order: { startTime: 'DESC' },
-      });
-    } else {
-      // Regular users can only see their own past reservations
-      reservations = await this.reservationRepository.find({
-        where: {
-          userId,
-          startTime: LessThan(today),
-        },
-        relations: ['court', 'user'],
-        order: { startTime: 'DESC' },
-      });
+      if (userRole === 'admin' || userRole === 'manager') {
+        // Admin/Manager can see all past reservations
+        reservations = await this.reservationRepository.find({
+          where: {
+            startTime: LessThan(today),
+          },
+          relations: ['court', 'user'],
+          order: { startTime: 'DESC' },
+        });
+      } else {
+        // Regular users can only see their own past reservations
+        reservations = await this.reservationRepository.find({
+          where: {
+            userId,
+            startTime: LessThan(today),
+          },
+          relations: ['court', 'user'],
+          order: { startTime: 'DESC' },
+        });
+      }
+
+      return reservations.map(reservation => this.toReservationResponseDto(reservation));
+    } catch (error) {
+      console.error('Error fetching past reservations:', error);
+
+      // Veritabanı bağlantı hatası durumunda boş array döndür
+      if (error.code === '58P01' || error.message?.includes('could not open file')) {
+        console.warn('Database file error detected, returning empty past reservations list');
+        return [];
+      }
+
+      // Diğer hatalar için yeniden fırlat
+      throw error;
     }
-
-    return reservations.map(reservation => this.toReservationResponseDto(reservation));
   }
 
   // Gelecek rezervasyonları getir (bugünden yeni olanlar)
   async getUpcomingReservations(userId: string, userRole: string): Promise<ReservationResponseDto[]> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    let reservations: Reservation[];
+      let reservations: Reservation[];
 
-    if (userRole === 'admin' || userRole === 'manager') {
-      // Admin/Manager can see all upcoming reservations
-      reservations = await this.reservationRepository.find({
-        where: {
-          startTime: MoreThanOrEqual(today),
-        },
-        relations: ['court', 'user'],
-        order: { startTime: 'ASC' },
-      });
-    } else {
-      // Regular users can only see their own upcoming reservations
-      reservations = await this.reservationRepository.find({
-        where: {
-          userId,
-          startTime: MoreThanOrEqual(today),
-        },
-        relations: ['court', 'user'],
-        order: { startTime: 'ASC' },
-      });
+      if (userRole === 'admin' || userRole === 'manager') {
+        // Admin/Manager can see all upcoming reservations
+        reservations = await this.reservationRepository.find({
+          where: {
+            startTime: MoreThanOrEqual(today),
+          },
+          relations: ['court', 'user'],
+          order: { startTime: 'ASC' },
+        });
+      } else {
+        // Regular users can only see their own upcoming reservations
+        reservations = await this.reservationRepository.find({
+          where: {
+            userId,
+            startTime: MoreThanOrEqual(today),
+          },
+          relations: ['court', 'user'],
+          order: { startTime: 'ASC' },
+        });
+      }
+
+      return reservations.map(reservation => this.toReservationResponseDto(reservation));
+    } catch (error) {
+      console.error('Error fetching upcoming reservations:', error);
+
+      // Veritabanı bağlantı hatası durumunda boş array döndür
+      if (error.code === '58P01' || error.message?.includes('could not open file')) {
+        console.warn('Database file error detected, returning empty upcoming reservations list');
+        return [];
+      }
+
+      // Diğer hatalar için yeniden fırlat
+      throw error;
     }
-
-    return reservations.map(reservation => this.toReservationResponseDto(reservation));
   }
 
   async findOne(id: string, userId: string, userRole: string): Promise<ReservationResponseDto> {
