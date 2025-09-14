@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: tennis-court-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: tennis_court_db
+      POSTGRES_USER: tennis_user
+      POSTGRES_PASSWORD: tennis_password
+      POSTGRES_HOST_AUTH_METHOD: md5
+      # Data persistence settings
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persistent data storage - NEVER DELETE THIS VOLUME
+      - postgres_data:/var/lib/postgresql/data
+      # Init scripts
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      # Custom postgresql.conf for better data safety
+      - ./postgres-config/postgresql.conf:/etc/postgresql/postgresql.conf
+    networks:
+      - tennis-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tennis_user -d tennis_court_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+
+  # pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: tennis-court-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@tennis-court.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - tennis-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Backend Application
+  backend:
+    image: node:20-alpine
+    container_name: tennis-court-backend
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: tennis_user
+      DATABASE_PASSWORD: tennis_password
+      DATABASE_NAME: tennis_court_db
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - tennis-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npm install && npm run start:dev"
+
+
+volumes:
+  # CRITICAL: Never delete these volumes - they contain your data!
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/postgres
+  pgadmin_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/pgadmin
+
+networks:
+  tennis-network:
+    driver: bridge
