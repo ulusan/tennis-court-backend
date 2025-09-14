@@ -21,8 +21,11 @@ export class User {
   @Column({ nullable: true })
   phone?: string;
 
-  @Column()
-  password: string;
+  @Column({ nullable: true })
+  password?: string;
+
+  @Column({ nullable: true, unique: true })
+  googleId?: string;
 
   @Column({
     type: 'enum',

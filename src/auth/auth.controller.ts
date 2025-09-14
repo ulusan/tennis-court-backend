@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Put, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, Put, UseGuards, Request, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -8,6 +8,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 
 interface AuthenticatedRequest extends Request {
   user: {
@@ -98,5 +99,27 @@ export class AuthController {
     @Body() changePasswordDto: ChangePasswordDto,
   ): Promise<AuthResponseDto> {
     return this.authService.changePassword(req.user.userId, changePasswordDto);
+  }
+
+  @Post('google')
+  @ApiOperation({ summary: 'Google ile giriş/kayıt' })
+  @ApiResponse({
+    status: 200,
+    description: 'Google ile giriş başarılı',
+    type: AuthResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Geçersiz Google verileri' })
+  async googleAuth(@Body() googleAuthDto: GoogleAuthDto): Promise<AuthResponseDto> {
+    return this.authService.googleAuth(googleAuthDto);
+  }
+
+  @Get('google-config')
+  @ApiOperation({ summary: 'Google OAuth konfigürasyon durumu' })
+  @ApiResponse({
+    status: 200,
+    description: 'Google OAuth konfigürasyon bilgileri',
+  })
+  async getGoogleConfig(): Promise<{ configured: boolean; hasClientId: boolean; hasClientSecret: boolean }> {
+    return this.authService.getGoogleConfig();
   }
 }

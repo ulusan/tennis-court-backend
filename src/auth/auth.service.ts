@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, ConflictException, BadRequestExcepti
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { User, UserRole } from '../users/entities/user.entity';
 import { LoginDto } from './dto/login.dto';
@@ -10,6 +11,7 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +19,7 @@ export class AuthService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
@@ -71,6 +74,9 @@ export class AuthService {
     }
 
     // Check password
+    if (!user.password) {
+      throw new UnauthorizedException('Geçersiz e-posta veya şifre');
+    }
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Geçersiz e-posta veya şifre');
@@ -149,6 +155,9 @@ export class AuthService {
     }
 
     // Verify current password
+    if (!user.password) {
+      throw new BadRequestException('Mevcut şifre yanlış');
+    }
     const isCurrentPasswordValid = await bcrypt.compare(changePasswordDto.currentPassword, user.password);
     if (!isCurrentPasswordValid) {
       throw new BadRequestException('Mevcut şifre yanlış');
@@ -165,6 +174,69 @@ export class AuthService {
       success: true,
       message: 'Şifre başarıyla değiştirildi',
       user: userResponse,
+    };
+  }
+
+  async googleAuth(googleAuthDto: GoogleAuthDto): Promise<AuthResponseDto> {
+    const { googleId, email, firstName, lastName, picture } = googleAuthDto;
+
+    // Check if user already exists with this Google ID
+    let user = await this.userRepository.findOne({
+      where: { googleId },
+    });
+
+    if (!user) {
+      // Check if user exists with this email
+      const existingUser = await this.userRepository.findOne({
+        where: { email },
+      });
+
+      if (existingUser) {
+        // Link Google account to existing user
+        existingUser.googleId = googleId;
+        existingUser.profileImageUrl = picture;
+        user = await this.userRepository.save(existingUser);
+      } else {
+        // Create new user
+        user = this.userRepository.create({
+          googleId,
+          email,
+          name: `${firstName} ${lastName}`.trim(),
+          profileImageUrl: picture,
+          role: UserRole.CUSTOMER,
+          isActive: true,
+        });
+        user = await this.userRepository.save(user);
+      }
+    } else {
+      // Update profile image if it has changed
+      if (picture && user.profileImageUrl !== picture) {
+        user.profileImageUrl = picture;
+        user = await this.userRepository.save(user);
+      }
+    }
+
+    // Generate JWT token
+    const payload = { sub: user.id, email: user.email, role: user.role };
+    const token = this.jwtService.sign(payload);
+
+    const userResponse = this.toUserResponseDto(user);
+    return {
+      success: true,
+      message: 'Google ile giriş başarılı',
+      user: userResponse,
+      token,
+    };
+  }
+
+  getGoogleConfig(): { configured: boolean; hasClientId: boolean; hasClientSecret: boolean } {
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
+
+    return {
+      configured: !!(clientId && clientSecret),
+      hasClientId: !!clientId,
+      hasClientSecret: !!clientSecret,
     };
   }
 
